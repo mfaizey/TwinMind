@@ -2,7 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const HOST = "127.0.0.1";
+const HOST = "0.0.0.0";
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const GROQ_CHAT_MODEL = "openai/gpt-oss-120b";
