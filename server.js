@@ -2,7 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const HOST = "127.0.0.1";
+const HOST = "0.0.0.0";
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const GROQ_CHAT_MODEL = "openai/gpt-oss-120b";
@@ -363,5 +363,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`TwinMind app running at http://${HOST}:${PORT}`);
+  console.log(`TwinMind listening on all interfaces, port ${PORT} (e.g. http://127.0.0.1:${PORT} on this machine)`);
 });
