@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TwinMind Live Suggestions</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="topbar-copy">
+          <p class="topbar-kicker">TwinMind</p>
+          <h1>Groq-only live suggestions</h1>
+          <p>
+            Whisper Large V3 transcription plus GPT-OSS 120B suggestions and chat, with prompts
+            editable in Settings.
+          </p>
+        </div>
+
+        <div class="topbar-actions">
+          <span class="model-badge">Groq only</span>
+          <button id="settingsButton" class="secondary-button topbar-button" type="button">
+            Settings
+          </button>
+        </div>
+      </header>
+
+      <section class="session-grid">
+        <section class="panel transcript-panel" aria-labelledby="transcriptTitle">
+          <header class="panel-header">
+            <div>
+              <p class="panel-index">1. Whisper Transcript</p>
+              <h2 id="transcriptTitle" class="sr-only">Whisper transcript</h2>
+            </div>
+            <span id="statusPill" class="status-pill idle">Idle</span>
+          </header>
+
+          <div class="mic-row">
+            <div class="mic-button-stack">
+              <button
+                id="toggleButton"
+                class="mic-button"
+                type="button"
+                aria-label="Toggle live transcription"
+              >
+                <span class="mic-button-core"></span>
+              </button>
+              <span id="toggleButtonText" class="mic-button-text">Start mic</span>
+            </div>
+
+            <div class="mic-copy">
+              <p id="micSummary" class="mic-summary">
+                Click mic to start. Audio is transcribed by Groq Whisper Large V3.
+              </p>
+              <p id="chunkMeta" class="chunk-meta">
+                Audio uploads every 30 seconds while the recorder is active.
+              </p>
+              <div class="mic-actions">
+                <button id="exportButton" class="secondary-button" type="button">
+                  Export session
+                </button>
+                <span id="supportBadge" class="support-badge">
+                  Models locked to Groq Whisper Large V3 and GPT-OSS 120B.
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <article class="note-card">
+            <p>
+              The transcript is produced from recorded audio chunks, not browser speech recognition.
+              Paste your own Groq API key in Settings. Nothing is shipped with a baked-in key.
+            </p>
+          </article>
+
+          <div id="transcriptFeed" class="transcript-feed" aria-live="polite"></div>
+          <div id="livePreview" class="live-preview" aria-live="polite"></div>
+        </section>
+
+        <section class="panel suggestions-panel" aria-labelledby="suggestionsTitle">
+          <header class="panel-header">
+            <div>
+              <p class="panel-index">2. Live Suggestions</p>
+              <h2 id="suggestionsTitle" class="sr-only">Live suggestions</h2>
+            </div>
+            <span id="batchCount" class="panel-meta">0 batches</span>
+          </header>
+
+          <div class="toolbar-row">
+            <button id="reloadSuggestionsButton" class="secondary-button" type="button">
+              Reload suggestions
+            </button>
+            <p id="autoRefreshMeta" class="toolbar-meta">refreshes every 30s while recording</p>
+          </div>
+
+          <article class="note-card">
+            <p>
+              Every refresh uses the same Groq GPT-OSS 120B model so prompt quality stays
+              comparable. The prompt, context window, temperature, and token budget are all
+              editable in Settings.
+            </p>
+          </article>
+
+          <div id="suggestionBatches" class="suggestion-batches" aria-live="polite"></div>
+        </section>
+
+        <aside class="panel chat-panel" aria-labelledby="chatTitle">
+          <header class="panel-header">
+            <div>
+              <p class="panel-index">3. Detailed Answers</p>
+              <h2 id="chatTitle" class="sr-only">Detailed answers chat</h2>
+            </div>
+
+            <div class="chat-header-actions">
+              <span id="chatSessionMeta" class="panel-meta">Session only</span>
+              <button id="clearChatButton" class="secondary-button clear-button" type="button">
+                Clear
+              </button>
+            </div>
+          </header>
+
+          <article class="note-card chat-note">
+            <p>
+              Clicking a suggestion opens a deeper answer here using a separate prompt and a larger
+              context window. Typed questions use the same GPT-OSS 120B model, again with
+              user-editable settings.
+            </p>
+          </article>
+
+          <div id="chatMessages" class="chat-messages" aria-live="polite"></div>
+
+          <form id="chatForm" class="chat-composer">
+            <label class="sr-only" for="chatInput">Ask a chat question</label>
+            <input
+              id="chatInput"
+              name="chatInput"
+              type="text"
+              autocomplete="off"
+              placeholder="Ask from the transcript or session context..."
+            />
+            <button id="chatSendButton" class="send-button" type="submit">Send</button>
+          </form>
+        </aside>
+      </section>
+    </main>
+
+    <div id="settingsModal" class="settings-modal" hidden>
+      <div class="settings-backdrop" data-close-settings="true"></div>
+
+      <section class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <header class="settings-header">
+          <div>
+            <p class="panel-index">Settings</p>
+            <h2 id="settingsTitle">Groq key, prompts, and context windows</h2>
+          </div>
+          <button
+            id="closeSettingsButton"
+            class="secondary-button icon-button"
+            type="button"
+            aria-label="Close settings"
+          >
+            Close
+          </button>
+        </header>
+
+        <p id="settingsBanner" class="settings-banner" hidden></p>
+
+        <form id="settingsForm" class="settings-form">
+          <section class="settings-group">
+            <div class="settings-group-header">
+              <h3>Groq Access</h3>
+              <p>User-supplied key only. Stored locally in this browser.</p>
+            </div>
+
+            <label class="field">
+              <span>Groq API key</span>
+              <input id="apiKey" name="apiKey" type="password" autocomplete="off" />
+            </label>
+          </section>
+
+          <section class="settings-group">
+            <div class="settings-group-header">
+              <h3>Transcription</h3>
+              <p>Whisper Large V3 is fixed. These settings tune how audio is chunked and guided.</p>
+            </div>
+
+            <div class="settings-grid">
+              <label class="field">
+                <span>Language hint</span>
+                <input
+                  id="transcriptionLanguage"
+                  name="transcriptionLanguage"
+                  type="text"
+                  maxlength="8"
+                  placeholder="en"
+                />
+              </label>
+
+              <label class="field">
+                <span>Chunk seconds</span>
+                <input
+                  id="transcriptionChunkSeconds"
+                  name="transcriptionChunkSeconds"
+                  type="number"
+                  min="10"
+                  max="120"
+                  step="1"
+                />
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Transcription prompt</span>
+              <textarea
+                id="transcriptionPrompt"
+                name="transcriptionPrompt"
+                rows="4"
+              ></textarea>
+            </label>
+          </section>
+
+          <section class="settings-group">
+            <div class="settings-group-header">
+              <h3>Live Suggestions Prompt</h3>
+              <p>Runs on GPT-OSS 120B every refresh.</p>
+            </div>
+
+            <div class="settings-grid settings-grid-wide">
+              <label class="field">
+                <span>Transcript context chunks</span>
+                <input
+                  id="liveSuggestionContextChunks"
+                  name="liveSuggestionContextChunks"
+                  type="number"
+                  min="1"
+                  max="20"
+                  step="1"
+                />
+              </label>
+
+              <label class="field">
+                <span>Recent chat turns</span>
+                <input
+                  id="liveSuggestionChatTurns"
+                  name="liveSuggestionChatTurns"
+                  type="number"
+                  min="1"
+                  max="24"
+                  step="1"
+                />
+              </label>
+
+              <label class="field">
+                <span>Temperature</span>
+                <input
+                  id="liveSuggestionTemperature"
+                  name="liveSuggestionTemperature"
+                  type="number"
+                  min="0"
+                  max="2"
+                  step="0.05"
+                />
+              </label>
+
+              <label class="field">
+                <span>Max tokens</span>
+                <input
+                  id="liveSuggestionMaxTokens"
+                  name="liveSuggestionMaxTokens"
+                  type="number"
+                  min="200"
+                  max="3000"
+                  step="10"
+                />
+              </label>
+
+              <label class="field">
+                <span>Reasoning effort</span>
+                <select id="liveSuggestionReasoning" name="liveSuggestionReasoning">
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Prompt</span>
+              <textarea id="liveSuggestionPrompt" name="liveSuggestionPrompt" rows="12"></textarea>
+            </label>
+          </section>
+
+          <section class="settings-group">
+            <div class="settings-group-header">
+              <h3>Detailed Answer Prompt</h3>
+              <p>Used when a suggestion is clicked.</p>
+            </div>
+
+            <div class="settings-grid settings-grid-wide">
+              <label class="field">
+                <span>Transcript context chunks</span>
+                <input
+                  id="expandedAnswerContextChunks"
+                  name="expandedAnswerContextChunks"
+                  type="number"
+                  min="1"
+                  max="20"
+                  step="1"
+                />
+              </label>
+
+              <label class="field">
+                <span>Recent chat turns</span>
+                <input
+                  id="expandedAnswerChatTurns"
+                  name="expandedAnswerChatTurns"
+                  type="number"
+                  min="1"
+                  max="20"
+                  step="1"
+                />
+              </label>
+
+              <label class="field">
+                <span>Temperature</span>
+                <input
+                  id="expandedAnswerTemperature"
+                  name="expandedAnswerTemperature"
+                  type="number"
+                  min="0"
+                  max="2"
+                  step="0.05"
+                />
+              </label>
+
+              <label class="field">
+                <span>Max tokens</span>
+                <input
+                  id="expandedAnswerMaxTokens"
+                  name="expandedAnswerMaxTokens"
+                  type="number"
+                  min="200"
+                  max="4000"
+                  step="10"
+                />
+              </label>
+
+              <label class="field">
+                <span>Reasoning effort</span>
+                <select id="expandedAnswerReasoning" name="expandedAnswerReasoning">
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Prompt</span>
+              <textarea
+                id="expandedAnswerPrompt"
+                name="expandedAnswerPrompt"
+                rows="10"
+              ></textarea>
+            </label>
+          </section>
+
+          <section class="settings-group">
+            <div class="settings-group-header">
+              <h3>Chat Prompt</h3>
+              <p>Used for typed questions in the right-hand panel.</p>
+            </div>
+
+            <div class="settings-grid settings-grid-wide">
+              <label class="field">
+                <span>Transcript context chunks</span>
+                <input
+                  id="chatTranscriptContextChunks"
+                  name="chatTranscriptContextChunks"
+                  type="number"
+                  min="1"
+                  max="24"
+                  step="1"
+                />
+              </label>
+
+              <label class="field">
+                <span>Recent chat turns</span>
+                <input
+                  id="chatHistoryTurns"
+                  name="chatHistoryTurns"
+                  type="number"
+                  min="1"
+                  max="24"
+                  step="1"
+                />
+              </label>
+
+              <label class="field">
+                <span>Temperature</span>
+                <input
+                  id="chatTemperature"
+                  name="chatTemperature"
+                  type="number"
+                  min="0"
+                  max="2"
+                  step="0.05"
+                />
+              </label>
+
+              <label class="field">
+                <span>Max tokens</span>
+                <input
+                  id="chatMaxTokens"
+                  name="chatMaxTokens"
+                  type="number"
+                  min="200"
+                  max="4000"
+                  step="10"
+                />
+              </label>
+
+              <label class="field">
+                <span>Reasoning effort</span>
+                <select id="chatReasoning" name="chatReasoning">
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Prompt</span>
+              <textarea id="chatPrompt" name="chatPrompt" rows="10"></textarea>
+            </label>
+          </section>
+
+          <footer class="settings-footer">
+            <button
+              id="restoreDefaultsButton"
+              class="secondary-button ghost-button"
+              type="button"
+            >
+              Restore defaults
+            </button>
+            <button id="saveSettingsButton" class="send-button" type="submit">Save settings</button>
+          </footer>
+        </form>
+      </section>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
